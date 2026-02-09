@@ -110,7 +110,7 @@ echo '{}' | docker run -i --entrypoint /bin/echo nanoclaw-agent:latest "Containe
 docker run -d --name nanoclaw-signal-api --restart=unless-stopped \
   -p 8080:8080 \
   -v $(pwd)/store/signal-cli:/home/.local/share/signal-cli \
-  -e MODE=native \
+  -e MODE=json-rpc \
   bbernhard/signal-cli-rest-api:latest
 ```
 
@@ -209,7 +209,18 @@ npm run build
 
 **For direct message** (they chose option 1):
 
-Ask the user for their personal phone number (with country code, including +, e.g. `+14155551234`). The Signal JID format is the number itself (e.g., `signal:+14155551234`).
+Ask the user for their personal phone number (with country code, including +, e.g. `+14155551234`).
+
+**Important:** Signal internally identifies users by UUID, not phone number. To discover the UUID:
+
+1. Ask the user to send a test message to the bot from their personal Signal
+2. Check the logs to find the UUID:
+```bash
+grep "Signal message received" logs/nanoclaw.log | tail -5
+```
+3. The `chatJid` field (e.g., `signal:d7789bc0-d5b3-4832-870c-6c44604fd425`) is the JID to register.
+
+Alternatively, start the app briefly with `npm run dev` so the message is logged, then use the UUID from the log.
 
 **For Signal group** (they chose option 2 or 3):
 
@@ -221,7 +232,7 @@ npm run dev
 
 Then check the database for Signal groups:
 ```bash
-sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE jid LIKE 'signal_group:%' ORDER BY last_message_time DESC LIMIT 20"
+sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE jid LIKE 'signal_group:%' OR jid LIKE 'signal:%' ORDER BY last_message_time DESC LIMIT 20"
 ```
 
 Show the group names and ask the user to pick one.
