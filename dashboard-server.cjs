@@ -168,7 +168,7 @@ const apiHandlers = {
   },
 
   '/api/tasks': () => {
-    return db.prepare('SELECT * FROM scheduled_tasks ORDER BY created_at DESC').all();
+    return db.prepare("SELECT * FROM scheduled_tasks WHERE status != 'completed' ORDER BY created_at DESC").all();
   },
 
   '/api/groups': () => {
