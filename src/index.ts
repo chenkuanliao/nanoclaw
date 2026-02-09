@@ -16,6 +16,8 @@ import {
   IPC_POLL_INTERVAL,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
+  SIGNAL_CONTAINER_NAME,
+  SIGNAL_ENABLED,
   STORE_DIR,
   TIMEZONE,
   TRIGGER_PATTERN,
@@ -53,6 +55,14 @@ import { GroupQueue } from './group-queue.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
+import { ensureSignalContainer } from './signal-container.js';
+import {
+  initSignalClient,
+  startSignalMessageLoop,
+  sendSignalMessage,
+  setSignalTyping,
+  syncSignalGroups,
+} from './signal-handler.js';
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -87,7 +97,13 @@ function translateJid(jid: string): string {
 
 async function setTyping(jid: string, isTyping: boolean): Promise<void> {
   try {
-    await sock.sendPresenceUpdate(isTyping ? 'composing' : 'paused', jid);
+    // Check if this is a Signal chat
+    if (jid.startsWith('signal:')) {
+      await setSignalTyping(jid, isTyping);
+    } else {
+      // WhatsApp typing indicator
+      await sock.sendPresenceUpdate(isTyping ? 'composing' : 'paused', jid);
+    }
   } catch (err) {
     logger.debug({ jid, err }, 'Failed to update typing status');
   }
@@ -329,8 +345,15 @@ async function runAgent(
 
 async function sendMessage(jid: string, text: string): Promise<void> {
   try {
-    await sock.sendMessage(jid, { text });
-    logger.info({ jid, length: text.length }, 'Message sent');
+    // Check if this is a Signal message (starts with "signal:")
+    if (jid.startsWith('signal:')) {
+      await sendSignalMessage(jid, text);
+      logger.info({ jid, length: text.length }, 'Signal message sent');
+    } else {
+      // WhatsApp message
+      await sock.sendMessage(jid, { text });
+      logger.info({ jid, length: text.length }, 'WhatsApp message sent');
+    }
   } catch (err) {
     logger.error({ jid, err }, 'Failed to send message');
   }
@@ -634,6 +657,10 @@ async function processTaskIpc(
           'Group metadata refresh requested via IPC',
         );
         await syncGroupMetadata(true);
+        // Also sync Signal groups if enabled
+        if (SIGNAL_ENABLED) {
+          await syncSignalGroups();
+        }
         // Write updated snapshot immediately
         const availableGroups = getAvailableGroups();
         writeGroupsSnapshot(
@@ -854,55 +881,46 @@ function recoverPendingMessages(): void {
 
 function ensureContainerSystemRunning(): void {
   try {
-    execSync('container system status', { stdio: 'pipe' });
-    logger.debug('Apple Container system already running');
+    execSync('docker info', { stdio: 'pipe' });
+    logger.debug('Docker is running');
   } catch {
-    logger.info('Starting Apple Container system...');
-    try {
-      execSync('container system start', { stdio: 'pipe', timeout: 30000 });
-      logger.info('Apple Container system started');
-    } catch (err) {
-      logger.error({ err }, 'Failed to start Apple Container system');
-      console.error(
-        '\n╔════════════════════════════════════════════════════════════════╗',
-      );
-      console.error(
-        '║  FATAL: Apple Container system failed to start                 ║',
-      );
-      console.error(
-        '║                                                                ║',
-      );
-      console.error(
-        '║  Agents cannot run without Apple Container. To fix:           ║',
-      );
-      console.error(
-        '║  1. Install from: https://github.com/apple/container/releases ║',
-      );
-      console.error(
-        '║  2. Run: container system start                               ║',
-      );
-      console.error(
-        '║  3. Restart NanoClaw                                          ║',
-      );
-      console.error(
-        '╚════════════════════════════════════════════════════════════════╝\n',
-      );
-      throw new Error('Apple Container system is required but failed to start');
-    }
+    logger.error('Docker is not running');
+    console.error(
+      '\n╔════════════════════════════════════════════════════════════════╗',
+    );
+    console.error(
+      '║  FATAL: Docker is not running                                  ║',
+    );
+    console.error(
+      '║                                                                ║',
+    );
+    console.error(
+      '║  Agents cannot run without Docker. To fix:                    ║',
+    );
+    console.error(
+      '║  1. Start Docker Desktop (macOS) or systemctl start docker    ║',
+    );
+    console.error(
+      '║  2. Restart NanoClaw                                          ║',
+    );
+    console.error(
+      '╚════════════════════════════════════════════════════════════════╝\n',
+    );
+    throw new Error('Docker is required but not running');
   }
 
   // Clean up stopped NanoClaw containers from previous runs
   try {
-    const output = execSync('container ls -a --format {{.Names}}', {
+    const output = execSync('docker ps -a --format {{.Names}}', {
       stdio: ['pipe', 'pipe', 'pipe'],
       encoding: 'utf-8',
     });
     const stale = output
       .split('\n')
       .map((n) => n.trim())
-      .filter((n) => n.startsWith('nanoclaw-'));
+      .filter((n) => n.startsWith('nanoclaw-') && n !== SIGNAL_CONTAINER_NAME);
     if (stale.length > 0) {
-      execSync(`container rm ${stale.join(' ')}`, { stdio: 'pipe' });
+      execSync(`docker rm ${stale.join(' ')}`, { stdio: 'pipe' });
       logger.info({ count: stale.length }, 'Cleaned up stopped containers');
     }
   } catch {
@@ -915,6 +933,44 @@ async function main(): Promise<void> {
   initDatabase();
   logger.info('Database initialized');
   loadState();
+
+  // Initialize Signal if enabled (retries in background if container isn't ready)
+  if (SIGNAL_ENABLED) {
+    const initSignal = async () => {
+      logger.info('Signal integration enabled');
+      const isHealthy = await ensureSignalContainer();
+      if (isHealthy) {
+        const signalClient = initSignalClient();
+        if (signalClient) {
+          startSignalMessageLoop(queue);
+          syncSignalGroups().catch((err) =>
+            logger.error({ err }, 'Failed to sync Signal groups'),
+          );
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const MAX_SIGNAL_RETRIES = 3;
+    const SIGNAL_RETRY_DELAY = 30000;
+
+    (async () => {
+      for (let attempt = 1; attempt <= MAX_SIGNAL_RETRIES; attempt++) {
+        const ok = await initSignal();
+        if (ok) return;
+        if (attempt < MAX_SIGNAL_RETRIES) {
+          logger.warn(
+            { attempt, maxRetries: MAX_SIGNAL_RETRIES },
+            `Signal initialization failed, retrying in ${SIGNAL_RETRY_DELAY / 1000}s...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, SIGNAL_RETRY_DELAY));
+        } else {
+          logger.error('Signal initialization failed after all retries');
+        }
+      }
+    })();
+  }
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {

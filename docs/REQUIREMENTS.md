@@ -20,11 +20,11 @@ The entire codebase should be something you can read and understand. One Node.js
 
 ### Security Through True Isolation
 
-Instead of application-level permission systems trying to prevent agents from accessing things, agents run in actual Linux containers (Apple Container). The isolation is at the OS level. Agents can only see what's explicitly mounted. Bash access is safe because commands run inside the container, not on your Mac.
+Instead of application-level permission systems trying to prevent agents from accessing things, agents run in actual Linux containers (Docker). The isolation is at the OS level. Agents can only see what's explicitly mounted. Bash access is safe because commands run inside the container, not on your host.
 
 ### Built for One User
 
-This isn't a framework or a platform. It's working software for my specific needs. I use WhatsApp and Email, so it supports WhatsApp and Email. I don't use Telegram, so it doesn't support Telegram. I add the integrations I actually want, not every possible integration.
+This isn't a framework or a platform. It's working software for my specific needs. I use Signal, so it supports Signal. I don't use Telegram, so it doesn't support Telegram. I add the integrations I actually want, not every possible integration.
 
 ### Customization = Code Changes
 
@@ -52,27 +52,21 @@ Skills to add or switch to different messaging platforms:
 - `/add-slack` - Add Slack as an input channel
 - `/add-discord` - Add Discord as an input channel
 - `/add-sms` - Add SMS via Twilio or similar
-- `/convert-to-telegram` - Replace WhatsApp with Telegram entirely
-
-### Container Runtime
-The project currently uses Apple Container (macOS-only). We need:
-- `/convert-to-docker` - Replace Apple Container with standard Docker
-- This unlocks Linux support and broader deployment options
+- `/add-whatsapp` - Add WhatsApp as an additional or replacement channel
 
 ### Platform Support
-- `/setup-linux` - Make the full setup work on Linux (depends on Docker conversion)
 - `/setup-windows` - Windows support via WSL2 + Docker
 
 ---
 
 ## Vision
 
-A personal Claude assistant accessible via WhatsApp, with minimal custom code.
+A personal Claude assistant accessible via Signal, with minimal custom code.
 
 **Core components:**
 - **Claude Agent SDK** as the core agent
-- **Apple Container** for isolated agent execution (Linux VMs)
-- **WhatsApp** as the primary I/O channel
+- **Docker** for isolated agent execution (Linux containers)
+- **Signal** as the primary I/O channel
 - **Persistent memory** per conversation and globally
 - **Scheduled tasks** that run Claude and can message back
 - **Web access** for search and browsing
@@ -90,7 +84,7 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 ### Message Routing
 - A router listens to WhatsApp and routes messages based on configuration
 - Only messages from registered groups are processed
-- Trigger: `@Andy` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
+- Trigger: `@Kevin` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
 - Unregistered groups are ignored completely
 
 ### Memory System
@@ -104,7 +98,7 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Sessions auto-compact when context gets too long, preserving critical information
 
 ### Container Isolation
-- All agents run inside Apple Container (lightweight Linux VMs)
+- All agents run inside Docker containers
 - Each agent invocation spawns a container with mounted directories
 - Containers provide filesystem isolation - agents can only see mounted paths
 - Bash access is safe because commands run inside the container, not on the host
@@ -137,10 +131,15 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 
 ## Integration Points
 
-### WhatsApp
-- Using baileys library for WhatsApp Web connection
+### Signal
+- Using signal-cli-rest-api Docker container for Signal connection
 - Messages stored in SQLite, polled by router
-- QR code authentication during setup
+- Phone number registration during setup
+
+### WhatsApp (Optional)
+- Using baileys library for WhatsApp Web connection (available via /customize)
+- Messages stored in SQLite, polled by router
+- QR code authentication
 
 ### Scheduler
 - Built-in scheduler runs on the host, spawns containers for task execution
@@ -171,8 +170,8 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Each user gets a custom setup matching their exact needs
 
 ### Skills
-- `/setup` - Install dependencies, authenticate WhatsApp, configure scheduler, start services
-- `/customize` - General-purpose skill for adding capabilities (new channels like Telegram, new integrations, behavior changes)
+- `/setup` - Install dependencies, register Signal, configure Docker, start services
+- `/customize` - General-purpose skill for adding capabilities (new channels like WhatsApp/Telegram, new integrations, behavior changes)
 
 ### Deployment
 - Runs on local Mac via launchd
@@ -184,10 +183,10 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 
 These are the creator's settings, stored here for reference:
 
-- **Trigger**: `@Andy` (case insensitive)
-- **Response prefix**: `Andy:`
+- **Trigger**: `@Kevin` (case insensitive)
+- **Response prefix**: `Kevin:`
 - **Persona**: Default Claude (no custom personality)
-- **Main channel**: Self-chat (messaging yourself in WhatsApp)
+- **Main channel**: Direct message to bot (Signal)
 
 ---
 

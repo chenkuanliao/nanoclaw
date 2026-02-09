@@ -1,11 +1,11 @@
 ---
 name: setup
-description: Run initial NanoClaw setup. Use when user wants to install dependencies, authenticate WhatsApp, register their main channel, or start the background services. Triggers on "setup", "install", "configure nanoclaw", or first-time setup requests.
+description: Run initial NanoClaw setup. Use when user wants to install dependencies, set up Signal, register their main channel, or start the background services. Triggers on "setup", "install", "configure nanoclaw", or first-time setup requests.
 ---
 
 # NanoClaw Setup
 
-Run all commands automatically. Only pause when user action is required (scanning QR codes).
+Run all commands automatically. Only pause when user action is required (Signal registration).
 
 **UX Note:** When asking the user questions, prefer using the `AskUserQuestion` tool instead of just outputting text. This integrates with Claude's built-in question/answer system for a better experience.
 
@@ -15,63 +15,30 @@ Run all commands automatically. Only pause when user action is required (scannin
 npm install
 ```
 
-## 2. Install Container Runtime
+## 2. Install Docker
 
-First, detect the platform and check what's available:
+Check if Docker is installed and running:
 
 ```bash
-echo "Platform: $(uname -s)"
-which container && echo "Apple Container: installed" || echo "Apple Container: not installed"
-which docker && docker info >/dev/null 2>&1 && echo "Docker: installed and running" || echo "Docker: not installed or not running"
+docker info >/dev/null 2>&1 && echo "Docker: installed and running" || echo "Docker: not installed or not running"
 ```
 
-### If NOT on macOS (Linux, etc.)
+**If Docker is running:** Continue to Section 3.
 
-Apple Container is macOS-only. Use Docker instead.
-
-Tell the user:
-> You're on Linux, so we'll use Docker for container isolation. Let me set that up now.
-
-**Use the `/convert-to-docker` skill** to convert the codebase to Docker, then continue to Section 3.
-
-### If on macOS
-
-**If Apple Container is already installed:** Continue to Section 3.
-
-**If Apple Container is NOT installed:** Ask the user:
-> NanoClaw needs a container runtime for isolated agent execution. You have two options:
->
-> 1. **Apple Container** (default) - macOS-native, lightweight, designed for Apple silicon
-> 2. **Docker** - Cross-platform, widely used, works on macOS and Linux
->
-> Which would you prefer?
-
-#### Option A: Apple Container
+**If Docker is NOT installed or not running:**
 
 Tell the user:
-> Apple Container is required for running agents in isolated environments.
+> NanoClaw uses Docker to run agents in isolated containers.
 >
-> 1. Download the latest `.pkg` from https://github.com/apple/container/releases
-> 2. Double-click to install
-> 3. Run `container system start` to start the service
->
-> Let me know when you've completed these steps.
+> 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) for your platform
+> 2. Start Docker Desktop
+> 3. Let me know when it's running
 
 Wait for user confirmation, then verify:
 
 ```bash
-container system start
-container --version
+docker info >/dev/null 2>&1 && echo "Docker is ready" || echo "Docker is still not running"
 ```
-
-**Note:** NanoClaw automatically starts the Apple Container system when it launches, so you don't need to start it manually after reboots.
-
-#### Option B: Docker
-
-Tell the user:
-> You've chosen Docker. Let me set that up now.
-
-**Use the `/convert-to-docker` skill** to convert the codebase to Docker, then continue to Section 3.
 
 ## 3. Configure Claude Authentication
 
@@ -127,37 +94,63 @@ Build the NanoClaw agent container:
 
 This creates the `nanoclaw-agent:latest` image with Node.js, Chromium, Claude Code CLI, and agent-browser.
 
-Verify the build succeeded by running a simple test (this auto-detects which runtime you're using):
+Verify the build succeeded:
 
 ```bash
-if which docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  echo '{}' | docker run -i --entrypoint /bin/echo nanoclaw-agent:latest "Container OK" || echo "Container build failed"
-else
-  echo '{}' | container run -i --entrypoint /bin/echo nanoclaw-agent:latest "Container OK" || echo "Container build failed"
-fi
+echo '{}' | docker run -i --entrypoint /bin/echo nanoclaw-agent:latest "Container OK" || echo "Container build failed"
 ```
 
-## 5. WhatsApp Authentication
+## 5. Signal Setup
 
 **USER ACTION REQUIRED**
 
-**IMPORTANT:** Run this command in the **foreground**. The QR code is multi-line ASCII art that must be displayed in full. Do NOT run in background or truncate the output.
-
-Tell the user:
-> A QR code will appear below. On your phone:
-> 1. Open WhatsApp
-> 2. Tap **Settings → Linked Devices → Link a Device**
-> 3. Scan the QR code
-
-Run with a long Bash tool timeout (120000ms) so the user has time to scan. Do NOT use the `timeout` shell command (it's not available on macOS).
+### 5a. Start Signal API container
 
 ```bash
-npm run auth
+docker run -d --name nanoclaw-signal-api --restart=unless-stopped \
+  -p 8080:8080 \
+  -v $(pwd)/store/signal-cli:/home/.local/share/signal-cli \
+  -e MODE=native \
+  bbernhard/signal-cli-rest-api:latest
 ```
 
-Wait for the script to output "Successfully authenticated" then continue.
+Wait a few seconds for it to start:
+```bash
+sleep 5
+docker logs nanoclaw-signal-api 2>&1 | tail -5
+```
 
-If it says "Already authenticated", skip to the next step.
+### 5b. Register Signal number
+
+Tell the user:
+> You need a phone number for your Signal bot. This can be:
+> - A Google Voice number
+> - A spare SIM
+> - Any number that can receive SMS for verification
+>
+> **Important:** This number should NOT be your personal Signal number (that will be used as your main channel).
+
+Run the interactive Signal setup:
+
+```bash
+npm run signal-setup
+```
+
+This will prompt for the phone number and verification code. Use a Bash tool timeout of 120000ms so the user has time to complete verification.
+
+### 5c. Write Signal config to .env
+
+Append Signal configuration to `.env`:
+
+```bash
+echo "" >> .env
+echo "# Signal Configuration" >> .env
+echo "SIGNAL_ENABLED=true" >> .env
+echo "SIGNAL_NUMBER=+THEIR_NUMBER_HERE" >> .env
+echo "SIGNAL_API_URL=http://localhost:8080" >> .env
+```
+
+Replace `+THEIR_NUMBER_HERE` with the actual number they registered.
 
 ## 6. Configure Assistant Name and Main Channel
 
@@ -166,7 +159,7 @@ This step configures three things at once: the trigger word, the main channel ty
 ### 6a. Ask for trigger word
 
 Ask the user:
-> What trigger word do you want to use? (default: `Andy`)
+> What trigger word do you want to use? (default: `Kevin`)
 >
 > In group chats, messages starting with `@TriggerWord` will be sent to Claude.
 > In your main channel (and optionally solo chats), no prefix is needed — all messages are processed.
@@ -185,14 +178,14 @@ Store their choice for use in the steps below.
 > - Can write to global memory that all groups can read
 > - Has read-write access to the entire NanoClaw project
 >
-> **Recommendation:** Use your personal "Message Yourself" chat or a solo WhatsApp group as your main channel. This ensures only you have admin control.
+> **Recommendation:** Use a direct message to the bot's Signal number as your main channel. This ensures only you have admin control.
 >
 > **Question:** Which setup will you use for your main channel?
 >
 > Options:
-> 1. Personal chat (Message Yourself) - Recommended
-> 2. Solo WhatsApp group (just me)
-> 3. Group with other people (I understand the security implications)
+> 1. Direct message to bot (Recommended) - Your personal Signal messages to the bot
+> 2. Signal group (just me and the bot)
+> 3. Signal group with other people (I understand the security implications)
 
 If they choose option 3, ask a follow-up:
 
@@ -205,42 +198,39 @@ If they choose option 3, ask a follow-up:
 >
 > Options:
 > 1. Yes, I understand and want to proceed
-> 2. No, let me use a personal chat or solo group instead
+> 2. No, let me use a direct message or solo group instead
 
 ### 6c. Register the main channel
 
-First build, then start the app briefly to connect to WhatsApp and sync group metadata. Use the Bash tool's timeout parameter (15000ms) — do NOT use the `timeout` shell command (it's not available on macOS). The app will be killed when the timeout fires, which is expected.
-
+First build:
 ```bash
 npm run build
 ```
 
-Then run briefly (set Bash tool timeout to 15000ms):
+**For direct message** (they chose option 1):
+
+Ask the user for their personal phone number (with country code, including +, e.g. `+14155551234`). The Signal JID format is the number itself (e.g., `signal:+14155551234`).
+
+**For Signal group** (they chose option 2 or 3):
+
+Signal groups require the group ID. Start the app briefly (set Bash tool timeout to 15000ms) so it can sync Signal groups:
+
 ```bash
 npm run dev
 ```
 
-**For personal chat** (they chose option 1):
-
-Personal chats are NOT synced to the database on startup — only groups are. Instead, ask the user for their phone number (with country code, no + or spaces, e.g. `14155551234`), then construct the JID as `{number}@s.whatsapp.net`.
-
-**For group** (they chose option 2 or 3):
-
-Groups are synced on startup via `groupFetchAllParticipating`. Query the database for recent groups:
+Then check the database for Signal groups:
 ```bash
-sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE jid LIKE '%@g.us' AND jid != '__group_sync__' ORDER BY last_message_time DESC LIMIT 40"
+sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE jid LIKE 'signal_group:%' ORDER BY last_message_time DESC LIMIT 20"
 ```
 
-Show only the **10 most recent** group names to the user and ask them to pick one. If they say their group isn't in the list, show the next batch from the results you already have. If they tell you the group name directly, look it up:
-```bash
-sqlite3 store/messages.db "SELECT jid, name FROM chats WHERE name LIKE '%GROUP_NAME%' AND jid LIKE '%@g.us'"
-```
+Show the group names and ask the user to pick one.
 
 ### 6d. Write the configuration
 
 Once you have the JID, configure it. Use the assistant name from step 6a.
 
-For personal chats (solo, no prefix needed), set `requiresTrigger` to `false`:
+For direct messages (solo, no prefix needed), set `requiresTrigger` to `false`:
 
 ```json
 {
@@ -264,8 +254,8 @@ mkdir -p data
 
 Then write `data/registered_groups.json` with the correct JID, trigger, and timestamp.
 
-If the user chose a name other than `Andy`, also update:
-1. `groups/global/CLAUDE.md` - Change "# Andy" and "You are Andy" to the new name
+If the user chose a name other than `Kevin`, also update:
+1. `groups/global/CLAUDE.md` - Change "# Kevin" and "You are Kevin" to the new name
 2. `groups/main/CLAUDE.md` - Same changes at the top
 
 Ensure the groups folder exists:
@@ -320,7 +310,7 @@ For each directory they provide, ask:
 ### 7b. Configure Non-Main Group Access
 
 Ask the user:
-> Should **non-main groups** (other WhatsApp chats you add later) be restricted to **read-only** access even if read-write is allowed for the directory?
+> Should **non-main groups** (other Signal chats you add later) be restricted to **read-only** access even if read-write is allowed for the directory?
 >
 > Recommended: **Yes** - this prevents other groups from modifying files even if you grant them access to a directory.
 
@@ -380,7 +370,7 @@ Tell the user:
 > }
 > ```
 
-## 8. Configure launchd Service
+## 8. Configure launchd Service and Dashboard
 
 Generate the plist file with correct paths automatically:
 
@@ -427,41 +417,49 @@ echo "  Node: ${NODE_PATH}"
 echo "  Project: ${PROJECT_PATH}"
 ```
 
-Build and start the service:
+Build and start:
 
 ```bash
 npm run build
 mkdir -p logs
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+chmod +x start.sh stop.sh
+./start.sh
 ```
+
+`start.sh` starts both the NanoClaw service and the dashboard.
 
 Verify it's running:
 ```bash
 launchctl list | grep nanoclaw
 ```
 
+Tell the user:
+> NanoClaw is running! The dashboard is available at http://localhost:3000 (or 3001 if 3000 is busy).
+>
+> To manage the service:
+> - Start: `./start.sh`
+> - Stop: `./stop.sh`
+
 ## 9. Test
 
 Tell the user (using the assistant name they configured):
-> Send `@ASSISTANT_NAME hello` in your registered chat.
+> Send a message to your bot via Signal. In your main channel (direct message), you don't need the `@` prefix — just send `hello` and the agent will respond.
 >
-> **Tip:** In your main channel, you don't need the `@` prefix — just send `hello` and the agent will respond.
+> In group chats, start messages with `@ASSISTANT_NAME`.
 
 Check the logs:
 ```bash
 tail -f logs/nanoclaw.log
 ```
 
-The user should receive a response in WhatsApp.
+The user should receive a response in Signal.
 
 ## Troubleshooting
 
 **Service not starting**: Check `logs/nanoclaw.error.log`
 
 **Container agent fails with "Claude Code process exited with code 1"**:
-- Ensure the container runtime is running:
-  - Apple Container: `container system start`
-  - Docker: `docker info` (start Docker Desktop on macOS, or `sudo systemctl start docker` on Linux)
+- Ensure Docker is running: `docker info`
 - Check container logs: `cat groups/main/logs/container-*.log | tail -50`
 
 **No response to messages**:
@@ -471,12 +469,12 @@ The user should receive a response in WhatsApp.
 - Check that the chat JID is in the database: `sqlite3 store/messages.db "SELECT * FROM registered_groups"`
 - Check `logs/nanoclaw.log` for errors
 
-**WhatsApp disconnected**:
-- The service will show a macOS notification
-- Run `npm run auth` to re-authenticate
-- Restart the service: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
+**Signal issues**:
+- Check Signal API container: `docker logs nanoclaw-signal-api`
+- Restart Signal API: `docker restart nanoclaw-signal-api`
+- Re-register: `npm run signal-setup`
 
 **Unload service**:
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+./stop.sh
 ```

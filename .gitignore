@@ -9,9 +9,24 @@ store/
 data/
 logs/
 
-# Secrets
+# Secrets & credentials
 *.keys.json
 .env
+whatsapp-qr.png
+
+# Group runtime data (personal memories, logs, agent-created files)
+groups/
+!groups/global/
+groups/global/*
+!groups/global/CLAUDE.md
+!groups/main/
+groups/main/*
+!groups/main/CLAUDE.md
+
+# Scratch / planning notes
+plan.md
+SIGNAL_INTEGRATION_SUMMARY.md
+SIGNAL_SETUP.md
 
 # OS
 .DS_Store
@@ -20,4 +35,5 @@ logs/
 .idea/
 .vscode/
 
+# Misc
 agents-sdk-docs

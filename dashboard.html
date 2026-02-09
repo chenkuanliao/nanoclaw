@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NanoClaw Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #222;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        h1 { font-size: 1.5em; font-weight: 600; color: #fff; }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #555;
+            flex-shrink: 0;
+        }
+        .status-dot.running { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+        .status-dot.stopped { background: #ef4444; box-shadow: 0 0 6px #ef444488; }
+
+        .status-label { font-size: 0.8em; color: #666; }
+
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .last-updated { font-size: 0.8em; color: #666; }
+
+        .refresh-btn {
+            background: #222;
+            color: #aaa;
+            border: 1px solid #333;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        .refresh-btn:hover { background: #2a2a2a; color: #fff; }
+
+        /* Stats row */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #181818;
+            border: 1px solid #222;
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .stat-label { font-size: 0.75em; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .stat-value { font-size: 1.6em; font-weight: 700; color: #fff; }
+        .stat-value.error { color: #ef4444; }
+        .stat-value.highlight { color: #3b82f6; }
+
+        /* Active containers banner */
+        .active-containers {
+            background: #181818;
+            border: 1px solid #222;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .active-containers .card-header { margin-bottom: 14px; }
+        .active-containers.has-active { border-color: #3b82f644; }
+
+        .container-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            background: #111;
+            border-left: 3px solid #3b82f6;
+        }
+        .container-item:last-child { margin-bottom: 0; }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #3b82f6;
+            animation: pulse-anim 1.5s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes pulse-anim {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .container-info { flex: 1; }
+        .container-name { font-size: 0.9em; font-weight: 500; color: #ddd; }
+        .container-meta { font-size: 0.78em; color: #555; }
+
+        /* Sections */
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+        .card {
+            background: #181818;
+            border: 1px solid #222;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .card.full { grid-column: 1 / -1; }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .card-title { font-size: 0.95em; font-weight: 600; color: #fff; }
+        .badge { font-size: 0.75em; background: #222; color: #888; padding: 2px 10px; border-radius: 10px; }
+
+        /* Items */
+        .item {
+            padding: 10px 12px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            background: #111;
+            border-left: 3px solid #333;
+        }
+
+        .item:last-child { margin-bottom: 0; }
+        .item-title { font-size: 0.9em; font-weight: 500; color: #ddd; margin-bottom: 3px; }
+        .item-meta { font-size: 0.78em; color: #555; }
+        .item.success { border-left-color: #22c55e; }
+        .item.error { border-left-color: #ef4444; }
+        .item.timeout { border-left-color: #f59e0b; }
+        .item.active { border-left-color: #3b82f6; }
+        .item.group { border-left-color: #a855f7; }
+
+        .empty { text-align: center; padding: 20px; color: #444; font-size: 0.9em; }
+
+        .msg-sender { color: #888; font-weight: 500; }
+        .msg-content { color: #bbb; }
+        .msg-time { color: #444; font-size: 0.75em; float: right; }
+        .msg-bot { color: #3b82f6; }
+
+        .scroll-area { max-height: 350px; overflow-y: auto; }
+        .scroll-area::-webkit-scrollbar { width: 4px; }
+        .scroll-area::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+        /* Memory cards */
+        .memory-card {
+            padding: 10px 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: #111;
+            border-left: 3px solid #a855f7;
+        }
+        .memory-card:last-child { margin-bottom: 0; }
+
+        .memory-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .memory-title { font-size: 0.9em; font-weight: 500; color: #ddd; }
+        .memory-size { font-size: 0.75em; color: #555; }
+
+        .memory-toggle {
+            font-size: 0.75em;
+            color: #666;
+            background: none;
+            border: 1px solid #333;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .memory-toggle:hover { color: #aaa; border-color: #555; }
+
+        .memory-preview {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background: #0a0a0a;
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.78em;
+            color: #888;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+            line-height: 1.5;
+        }
+        .memory-preview::-webkit-scrollbar { width: 4px; }
+        .memory-preview::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        .memory-preview.expanded { display: block; }
+
+        .group-card-info { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+        .group-tag {
+            font-size: 0.7em;
+            padding: 1px 6px;
+            border-radius: 3px;
+            background: #222;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-left">
+                <h1>NanoClaw</h1>
+                <div class="status-dot" id="serviceDot" title="Service status"></div>
+                <span class="status-label" id="serviceLabel">checking...</span>
+            </div>
+            <div class="header-right">
+                <span class="last-updated" id="lastUpdated"></span>
+                <button class="refresh-btn" onclick="refreshData()">Refresh</button>
+            </div>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Groups</div>
+                <div class="stat-value" id="statGroups">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active Tasks</div>
+                <div class="stat-value" id="statTasks">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Containers</div>
+                <div class="stat-value" id="statContainers">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Runs</div>
+                <div class="stat-value" id="statRuns">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Errors (24h)</div>
+                <div class="stat-value" id="statErrors">-</div>
+            </div>
+        </div>
+
+        <!-- Active Containers -->
+        <div class="active-containers" id="activeContainers">
+            <div class="card-header">
+                <span class="card-title">Active Containers</span>
+                <span class="badge" id="containerCount">0</span>
+            </div>
+            <div id="containersList"><div class="empty">All idle</div></div>
+        </div>
+
+        <!-- Groups + Memories -->
+        <div class="grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Groups</span>
+                    <span class="badge" id="groupCount">0</span>
+                </div>
+                <div class="scroll-area" id="groupsList"><div class="empty">No groups registered</div></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Group Memories</span>
+                    <span class="badge" id="memoryCount">0</span>
+                </div>
+                <div class="scroll-area" id="memoriesList"><div class="empty">No CLAUDE.md files found</div></div>
+            </div>
+        </div>
+
+        <!-- Container Runs + Tasks -->
+        <div class="grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Recent Container Runs</span>
+                    <span class="badge" id="containerLogCount">0</span>
+                </div>
+                <div class="scroll-area" id="containerLogsList"><div class="empty">No container runs</div></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Scheduled Tasks</span>
+                    <span class="badge" id="taskCount">0</span>
+                </div>
+                <div class="scroll-area" id="tasksList"><div class="empty">No scheduled tasks</div></div>
+            </div>
+        </div>
+
+        <!-- Task Run History + Messages -->
+        <div class="grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Task Run History</span>
+                    <span class="badge" id="logCount">0</span>
+                </div>
+                <div class="scroll-area" id="logsList"><div class="empty">No runs yet</div></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Recent Messages</span>
+                    <span class="badge" id="msgCount">0</span>
+                </div>
+                <div class="scroll-area" id="msgList"><div class="empty">No messages</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchData(endpoint) {
+            try {
+                const res = await fetch(endpoint);
+                return await res.json();
+            } catch (e) {
+                console.error(`Error fetching ${endpoint}:`, e);
+                return null;
+            }
+        }
+
+        function esc(str) {
+            if (!str) return '';
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        function timeAgo(ts) {
+            if (!ts) return '-';
+            const diff = Date.now() - new Date(ts).getTime();
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return `${mins}m ago`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `${hrs}h ago`;
+            const days = Math.floor(hrs / 24);
+            return `${days}d ago`;
+        }
+
+        function fmtDuration(ms) {
+            if (!ms && ms !== 0) return '-';
+            const s = Math.floor(ms / 1000);
+            if (s < 60) return `${s}s`;
+            const m = Math.floor(s / 60);
+            if (m < 60) return `${m}m ${s % 60}s`;
+            return `${Math.floor(m / 60)}h ${m % 60}m`;
+        }
+
+        function fmtTime(ts) {
+            if (!ts) return '-';
+            return new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function toggleMemory(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('expanded');
+            const btn = el.previousElementSibling.querySelector('.memory-toggle');
+            btn.textContent = el.classList.contains('expanded') ? 'collapse' : 'expand';
+        }
+
+        async function refreshData() {
+            const [status, serviceStatus, containers, memories, containerLogs, tasks, groups, logs, msgs] = await Promise.all([
+                fetchData('/api/status'),
+                fetchData('/api/service-status'),
+                fetchData('/api/containers'),
+                fetchData('/api/memories'),
+                fetchData('/api/logs/recent'),
+                fetchData('/api/tasks'),
+                fetchData('/api/groups'),
+                fetchData('/api/logs'),
+                fetchData('/api/messages/recent'),
+            ]);
+
+            document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+            // Service status
+            if (serviceStatus) {
+                const dot = document.getElementById('serviceDot');
+                const label = document.getElementById('serviceLabel');
+                if (serviceStatus.running) {
+                    dot.className = 'status-dot running';
+                    label.textContent = serviceStatus.uptime ? `up ${serviceStatus.uptime}` : 'running';
+                } else {
+                    dot.className = 'status-dot stopped';
+                    label.textContent = 'stopped';
+                }
+            }
+
+            // Stats
+            if (status) {
+                document.getElementById('statGroups').textContent = status.registeredGroups;
+                document.getElementById('statTasks').textContent = status.activeTasks;
+                document.getElementById('statRuns').textContent = status.totalRuns;
+                const errEl = document.getElementById('statErrors');
+                errEl.textContent = status.recentErrors;
+                errEl.className = status.recentErrors > 0 ? 'stat-value error' : 'stat-value';
+            }
+
+            // Active containers
+            if (containers) {
+                const count = containers.length;
+                document.getElementById('containerCount').textContent = count;
+                const statEl = document.getElementById('statContainers');
+                statEl.textContent = count;
+                statEl.className = count > 0 ? 'stat-value highlight' : 'stat-value';
+
+                const wrap = document.getElementById('activeContainers');
+                wrap.className = count > 0 ? 'active-containers has-active' : 'active-containers';
+
+                const el = document.getElementById('containersList');
+                if (count === 0) {
+                    el.innerHTML = '<div class="empty">All idle</div>';
+                } else {
+                    el.innerHTML = containers.map(c => {
+                        // Extract group name from container name (nanoclaw-{group}-{timestamp})
+                        const parts = c.name.replace(/^nanoclaw-/, '');
+                        const groupName = parts.replace(/-\d+$/, '');
+                        return `
+                            <div class="container-item">
+                                <div class="pulse"></div>
+                                <div class="container-info">
+                                    <div class="container-name">${esc(groupName)}</div>
+                                    <div class="container-meta">${esc(c.status)} &middot; ${esc(c.runningFor)}</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // Groups
+            if (groups) {
+                document.getElementById('groupCount').textContent = groups.length;
+                const el = document.getElementById('groupsList');
+                if (groups.length === 0) {
+                    el.innerHTML = '<div class="empty">No groups registered</div>';
+                } else {
+                    el.innerHTML = groups.map(g => `
+                        <div class="item group">
+                            <div class="item-title">${esc(g.name)}</div>
+                            <div class="item-meta">
+                                ${esc(g.folder)} &middot; trigger: ${esc(g.trigger_pattern)} &middot;
+                                ${g.messageCount} msgs &middot; last: ${timeAgo(g.lastActivity)}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Memories
+            if (memories) {
+                document.getElementById('memoryCount').textContent = memories.length;
+                const el = document.getElementById('memoriesList');
+                if (memories.length === 0) {
+                    el.innerHTML = '<div class="empty">No CLAUDE.md files found</div>';
+                } else {
+                    el.innerHTML = memories.map((m, i) => {
+                        const preview = m.content.split('\n').slice(0, 25).join('\n');
+                        return `
+                            <div class="memory-card">
+                                <div class="memory-header" onclick="toggleMemory('mem-${i}')">
+                                    <div>
+                                        <span class="memory-title">${esc(m.group)}/CLAUDE.md</span>
+                                        <span class="memory-size">${m.lines} lines</span>
+                                    </div>
+                                    <button class="memory-toggle" onclick="event.stopPropagation(); toggleMemory('mem-${i}')">expand</button>
+                                </div>
+                                <div class="memory-preview" id="mem-${i}">${esc(preview)}${m.lines > 25 ? '\n\n... (' + (m.lines - 25) + ' more lines)' : ''}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // Container logs
+            if (containerLogs) {
+                document.getElementById('containerLogCount').textContent = containerLogs.length;
+                const el = document.getElementById('containerLogsList');
+                if (containerLogs.length === 0) {
+                    el.innerHTML = '<div class="empty">No container runs</div>';
+                } else {
+                    el.innerHTML = containerLogs.map(l => `
+                        <div class="item ${l.status}">
+                            <div class="item-title">${esc(l.groupFolder)} &middot; ${fmtDuration(l.durationMs)}</div>
+                            <div class="item-meta">
+                                ${fmtTime(l.timestamp)} &middot; exit ${l.exitCode}${l.isTimeout ? ' (timeout)' : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Tasks
+            if (tasks) {
+                document.getElementById('taskCount').textContent = tasks.length;
+                const el = document.getElementById('tasksList');
+                if (tasks.length === 0) {
+                    el.innerHTML = '<div class="empty">No scheduled tasks</div>';
+                } else {
+                    el.innerHTML = tasks.map(t => `
+                        <div class="item ${t.status === 'active' ? 'active' : ''}">
+                            <div class="item-title">${esc((t.prompt || '').substring(0, 80))}${(t.prompt||'').length > 80 ? '...' : ''}</div>
+                            <div class="item-meta">
+                                ${esc(t.group_folder)} &middot; ${esc(t.schedule_type)}: ${esc(t.schedule_value)} &middot;
+                                ${esc(t.status)}${t.next_run ? ' &middot; next: ' + fmtTime(t.next_run) : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Task run history
+            if (logs) {
+                document.getElementById('logCount').textContent = logs.length;
+                const el = document.getElementById('logsList');
+                if (logs.length === 0) {
+                    el.innerHTML = '<div class="empty">No runs yet</div>';
+                } else {
+                    el.innerHTML = logs.map(l => `
+                        <div class="item ${l.status === 'error' ? 'error' : 'success'}">
+                            <div class="item-title">${esc(l.group_folder)} &middot; ${fmtDuration(l.duration_ms)}</div>
+                            <div class="item-meta">
+                                ${fmtTime(l.run_at)} &middot; ${esc(l.status)}
+                                ${l.error ? ' &middot; ' + esc(l.error.substring(0, 60)) : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Messages
+            if (msgs) {
+                document.getElementById('msgCount').textContent = msgs.length;
+                const el = document.getElementById('msgList');
+                if (msgs.length === 0) {
+                    el.innerHTML = '<div class="empty">No messages</div>';
+                } else {
+                    el.innerHTML = msgs.map(m => `
+                        <div class="item">
+                            <div>
+                                <span class="msg-sender ${m.is_from_me ? 'msg-bot' : ''}">${esc(m.sender_name || 'Unknown')}</span>
+                                <span class="msg-time">${timeAgo(m.timestamp)}</span>
+                            </div>
+                            <div class="msg-content">${esc((m.content || '').substring(0, 120))}${(m.content||'').length > 120 ? '...' : ''}</div>
+                        </div>
+                    `).join('');
+                }
+            }
+        }
+
+        refreshData();
+        setInterval(refreshData, 3000);
+    </script>
+</body>
+</html>

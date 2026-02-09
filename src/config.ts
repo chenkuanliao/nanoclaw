@@ -1,8 +1,16 @@
 import path from 'path';
 
-export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Andy';
+export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Kevin';
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
+
+// Signal configuration
+export const SIGNAL_API_URL = process.env.SIGNAL_API_URL || 'http://localhost:8080';
+export const SIGNAL_ENABLED = process.env.SIGNAL_ENABLED !== 'false';
+export const SIGNAL_NUMBER = process.env.SIGNAL_NUMBER || '';
+export const SIGNAL_CONTAINER_NAME = 'nanoclaw-signal-api';
+export const SIGNAL_IMAGE =
+  process.env.SIGNAL_IMAGE || 'bbernhard/signal-cli-rest-api:latest';
 
 // Absolute paths needed for container mounts
 const PROJECT_ROOT = process.cwd();

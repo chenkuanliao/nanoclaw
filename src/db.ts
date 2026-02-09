@@ -236,6 +236,24 @@ export function storeMessage(
   );
 }
 
+/**
+ * Store a Signal message directly (not tied to WhatsApp proto format).
+ */
+export function storeSignalMessage(
+  chatJid: string,
+  sender: string,
+  senderName: string,
+  content: string,
+  timestamp: number,
+): void {
+  const ts = new Date(timestamp).toISOString();
+  const msgId = `signal-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
+
+  db.prepare(
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(msgId, chatJid, sender, senderName, content, ts, 0);
+}
+
 export function getNewMessages(
   jids: string[],
   lastTimestamp: string,
