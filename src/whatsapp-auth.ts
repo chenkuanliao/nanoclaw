@@ -96,7 +96,10 @@ async function authenticate(): Promise<void> {
         } else {
           // Auto-open the image
           import('child_process').then(({ execSync }) => {
-            try { execSync(`open "${qrImagePath}"`); } catch {}
+            try {
+              const openCmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
+              execSync(`${openCmd} "${qrImagePath}"`);
+            } catch {}
           });
         }
       });

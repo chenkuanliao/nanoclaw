@@ -370,7 +370,15 @@ Tell the user:
 > }
 > ```
 
-## 8. Configure launchd Service and Dashboard
+## 8. Configure Service and Dashboard
+
+Detect the platform first:
+
+```bash
+uname -s
+```
+
+### macOS (launchd)
 
 Generate the plist file with correct paths automatically:
 
@@ -417,7 +425,29 @@ echo "  Node: ${NODE_PATH}"
 echo "  Project: ${PROJECT_PATH}"
 ```
 
-Build and start:
+### Linux (systemd)
+
+Generate and install a user-level systemd service:
+
+```bash
+NODE_PATH=$(which node)
+PROJECT_PATH=$(pwd)
+
+mkdir -p ~/.config/systemd/user
+
+sed -e "s|{{NODE_PATH}}|${NODE_PATH}|g" \
+    -e "s|{{PROJECT_ROOT}}|${PROJECT_PATH}|g" \
+    systemd/nanoclaw.service > ~/.config/systemd/user/nanoclaw.service
+
+systemctl --user daemon-reload
+systemctl --user enable nanoclaw
+
+echo "Created systemd service with:"
+echo "  Node: ${NODE_PATH}"
+echo "  Project: ${PROJECT_PATH}"
+```
+
+### Build and start (both platforms)
 
 ```bash
 npm run build
@@ -430,7 +460,7 @@ chmod +x start.sh stop.sh
 
 Verify it's running:
 ```bash
-launchctl list | grep nanoclaw
+./status.sh
 ```
 
 Tell the user:
@@ -439,6 +469,7 @@ Tell the user:
 > To manage the service:
 > - Start: `./start.sh`
 > - Stop: `./stop.sh`
+> - Status: `./status.sh`
 
 ## 9. Test
 
@@ -477,4 +508,9 @@ The user should receive a response in Signal.
 **Unload service**:
 ```bash
 ./stop.sh
+```
+
+**Linux: enable lingering** (so user services run without login):
+```bash
+loginctl enable-linger $USER
 ```
