@@ -126,6 +126,61 @@ Key files:
 - `src/db.ts` - SQLite operations
 - `groups/*/CLAUDE.md` - Per-group memory
 
+## Moving to Another Machine
+
+NanoClaw's knowledge lives in plain files, so migrating is just copying the right directories.
+
+### What is the "brain"
+
+| What | Path | Contains |
+|------|------|----------|
+| Group memories | `groups/*/CLAUDE.md` | Per-group persistent knowledge (the main brain) |
+| Global memory | `groups/global/CLAUDE.md` | Shared knowledge readable by all groups |
+| Database | `store/messages.db` | Message history, registered groups, scheduled tasks, routing state |
+| Session history | `data/sessions/` | Per-group Claude conversation continuity |
+
+### Minimal migration (knowledge only)
+
+If you just want the accumulated knowledge on a fresh install:
+
+```bash
+# Old machine
+tar czf brain.tar.gz groups/
+
+# New machine (after git clone + /setup)
+tar xzf brain.tar.gz
+```
+
+This copies every `CLAUDE.md` — the personality, preferences, and context each agent has built up. You'll lose message history and scheduled tasks but keep everything the agent has learned.
+
+### Full migration
+
+```bash
+# Old machine
+tar czf nanoclaw-state.tar.gz \
+  store/messages.db \
+  groups/ \
+  data/sessions/ \
+  data/signal-cli/ \
+  .env
+
+# New machine (after git clone)
+tar xzf nanoclaw-state.tar.gz
+npm install
+./container/build.sh
+./start.sh
+```
+
+This preserves message history, scheduled tasks, conversation continuity, and Signal authentication (no re-registration needed).
+
+### What you don't need to copy
+
+- `data/ipc/` — regenerated at runtime
+- `data/env/` — regenerated from `.env` at startup
+- `groups/*/logs/` — historical container logs, not needed for operation
+- `node_modules/`, `dist/` — reinstalled/rebuilt
+- `~/.config/nanoclaw/mount-allowlist.json` — recreate on the new machine since paths will differ
+
 ## FAQ
 
 **Why Signal and not Telegram/WhatsApp/etc?**
