@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { exec, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -19,6 +20,7 @@ import {
   SIGNAL_CONTAINER_NAME,
   SIGNAL_ENABLED,
   STORE_DIR,
+  WHATSAPP_ENABLED,
   TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
@@ -778,16 +780,6 @@ async function connectWhatsApp(): Promise<void> {
           );
         }, GROUP_SYNC_INTERVAL_MS);
       }
-      startSchedulerLoop({
-        sendMessage,
-        registeredGroups: () => registeredGroups,
-        getSessions: () => sessions,
-        queue,
-        onProcess: (groupJid, proc, containerName) => queue.registerProcess(groupJid, proc, containerName),
-      });
-      startIpcWatcher();
-      queue.setProcessMessagesFn(processGroupMessages);
-      recoverPendingMessages();
       startMessageLoop();
     }
   });
@@ -985,7 +977,25 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 
-  await connectWhatsApp();
+  // Core initialization (runs regardless of channel)
+  startSchedulerLoop({
+    sendMessage,
+    registeredGroups: () => registeredGroups,
+    getSessions: () => sessions,
+    queue,
+    onProcess: (groupJid, proc, containerName) => queue.registerProcess(groupJid, proc, containerName),
+  });
+  startIpcWatcher();
+  queue.setProcessMessagesFn(processGroupMessages);
+  recoverPendingMessages();
+
+  if (WHATSAPP_ENABLED) {
+    await connectWhatsApp();
+  } else {
+    logger.info('WhatsApp disabled. Running with Signal only.');
+    // Keep process alive
+    await new Promise(() => {});
+  }
 }
 
 main().catch((err) => {

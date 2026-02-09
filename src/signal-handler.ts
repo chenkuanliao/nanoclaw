@@ -197,8 +197,10 @@ export async function sendSignalMessage(
     ? recipient.substring(7)
     : recipient;
 
-  // Determine if this is a group by checking if it looks like a group ID
-  const isGroup = actualRecipient.length > 20;
+  // Determine if this is a group: Signal group IDs are base64-encoded,
+  // while individual recipients are UUIDs (with or without hyphens) or phone numbers
+  const uuidPattern = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+  const isGroup = !actualRecipient.startsWith('+') && !uuidPattern.test(actualRecipient);
 
   try {
     await signalClient.sendMessage(actualRecipient, message, isGroup);

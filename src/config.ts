@@ -5,6 +5,9 @@ export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Kevin';
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
 
+// WhatsApp configuration
+export const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED === 'true';
+
 // Signal configuration
 export const SIGNAL_API_URL = process.env.SIGNAL_API_URL || 'http://localhost:8080';
 export const SIGNAL_ENABLED = process.env.SIGNAL_ENABLED !== 'false';
